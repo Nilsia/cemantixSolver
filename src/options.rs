@@ -121,11 +121,10 @@ impl Cli {
         } else {
             // working directory specified wo we have to see if we can generate files in it
             if self.words_directory.is_none() {
-                let a = self.words_directory.insert(self.generate_path(&vec![
+                let _ = self.words_directory.insert(self.generate_path(&vec![
                     self.working_directory.as_ref().unwrap().to_str().unwrap(),
                     DEFAULT_WORDS_FOLDER,
                 ]));
-                println!("adding new {:?}", a);
             } else {
                 let _ = self.words_directory.insert(self.generate_path(&vec![
                     self.working_directory.as_ref().unwrap().to_str().unwrap(),
@@ -146,11 +145,6 @@ impl Cli {
                 ]));
             }
         }
-
-        println!(
-            "wkD : {:?}\nwdH : {:?}\nwdF : {:?}",
-            self.working_directory, self.word_history, self.words_directory
-        );
 
         match &self.command {
             Commands::Solve(name) => {

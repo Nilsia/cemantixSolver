@@ -252,7 +252,6 @@ async fn get_file_word(
 
 async fn generate_nearby_word(word: &String, words_dir: &PathBuf) -> Result<(), Box<dyn Error>> {
     let file_content = get_nearby(&word).await;
-    println!("wordsdir = {:?}", words_dir);
     if file_content.is_empty() {
         return Err(Box::from(format!(
             "Impossible de récupérer les mots proches de {word}"
@@ -265,7 +264,7 @@ async fn generate_nearby_word(word: &String, words_dir: &PathBuf) -> Result<(), 
                 ErrorKind::NotFound => {
                     eprintln!("An error occured : {e}");
                     return Err(Box::from(e));
-                },
+                }
                 ErrorKind::AlreadyExists => {
                     return Err(Box::from("Already generated"));
                 }
@@ -286,7 +285,7 @@ async fn generate_nearby_word(word: &String, words_dir: &PathBuf) -> Result<(), 
 
 async fn solve_cemantix(
     filename: &PathBuf,
-    vec_size: &usize,
+    nb_thread: &usize,
     cli: &Cli,
 ) -> Result<(), Box<dyn Error>> {
     let file = OpenOptions::new().read(true).open(filename).unwrap();
@@ -298,19 +297,18 @@ async fn solve_cemantix(
         0.0,
         filename.clone(),
     )));
-    let mut words_list: Vec<String> = vec![String::new(); *vec_size];
+    let mut words_list: Vec<String> = vec![String::new(); *nb_thread];
 
     let mut words_tested: Vec<String> = Vec::new();
 
     for (_index, line) in reader.lines().enumerate() {
         let word: String = line.unwrap();
-        //println!("{_index} : {word}");
         if words_tested.contains(&word) {
             continue;
         }
         words_tested.push(word.to_owned());
-        if _index % vec_size != vec_size - 1 {
-            words_list[_index % vec_size] = word;
+        if _index % nb_thread != nb_thread - 1 {
+            words_list[_index % nb_thread] = word;
             continue;
         }
         {
@@ -321,12 +319,12 @@ async fn solve_cemantix(
             }
             drop(b);
         }
-        words_list[_index % vec_size] = word.to_owned();
+        words_list[_index % nb_thread] = word.to_owned();
 
         launch_threads_solve(
             words_list.clone(),
             best_word.clone(),
-            vec_size,
+            nb_thread,
             cli.words_directory.as_ref().unwrap(),
             cli.word_history.as_ref().unwrap(),
         )
@@ -339,7 +337,7 @@ async fn solve_cemantix(
 async fn launch_threads_solve(
     words_vec: Vec<String>,
     solver_struct: Arc<Mutex<SolverStruct>>,
-    vec_size: &usize,
+    nb_thread: &usize,
     words_fcontainer_name: &PathBuf,
     word_history_filename: &PathBuf,
 ) {
@@ -351,11 +349,10 @@ async fn launch_threads_solve(
 
     let res_all = join_all(futures).await;
 
-    for i in 0..*vec_size {
+    for i in 0..*nb_thread {
         match res_all.get(i) {
             Some(v) => match v {
                 Ok(f) => {
-                    //println!("f = {f}");
                     let word = match words_vec.get(i) {
                         Some(d) => d,
                         None => {
@@ -383,7 +380,6 @@ async fn launch_threads_solve(
                         if let Err(e) = extend_file(&b.filename, words_fcontainer_name).await {
                             eprintln!("Cannot extend file {} : {e}", b.f_to_string());
                         }
-                        //return
                         match generate_nearby_word(&word, words_fcontainer_name).await {
                             Ok(_) => {
                                 println!("Nearby words generated")
@@ -547,15 +543,14 @@ async fn get_nearby(word: &String) -> String {
 }
 
 async fn send_request(word: String) -> Result<f32, Box<dyn Error>> {
-    //println!("youi");
     let client = reqwest::Client::new();
-    let params = [("word", word)];
-    //println!("bof");
+    let params = [("word", &word)];
     let a = client
         .post("https://cemantix.certitudes.org/score")
         .form(&params)
-        .header("Content-type", "application/x-www-form-urlencoded");
-    //println!("dskfjhksdhfk");
+        .header("Content-type", "application/x-www-form-urlencoded")
+        .header("Origin", "https://cemantix.certitudes.org");
+
     let response = match a.send().await {
         Ok(r) => r,
         Err(e) => {
@@ -563,7 +558,6 @@ async fn send_request(word: String) -> Result<f32, Box<dyn Error>> {
             return Err(Box::from(e));
         }
     };
-    //println!("popop");
     let json_parsed: Value = match response.status() {
         reqwest::StatusCode::OK => match response.text().await {
             Ok(text) => match serde_json::from_str(&text.as_str()) {
@@ -587,11 +581,9 @@ async fn send_request(word: String) -> Result<f32, Box<dyn Error>> {
             return Err(Box::from(format!("Unexpected error : {e}")));
         }
     };
-    //println!("insied");
 
     match json_parsed.get("error") {
         Some(_) => {
-            //println!("Mot inconnu");
             return Err(Box::from("unknown"));
         }
         None => (),
@@ -599,7 +591,6 @@ async fn send_request(word: String) -> Result<f32, Box<dyn Error>> {
 
     let value = json_parsed.get("score");
     if value.is_some() {
-        //println!("kdjsfjk = {}", value.unwrap().to_string());
         return Ok(value.unwrap().to_string().parse().unwrap());
     } else {
         return Err(Box::from("None value"));
