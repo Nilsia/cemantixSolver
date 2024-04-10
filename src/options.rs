@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use clap::{command, Args, Parser};
 
-use crate::{extend_file, generate_nearby_word, remove_useless_words, solve_cemantix, sort_file};
+use crate::{
+    extend_file, generate_graph, generate_nearby_word, remove_useless_words, solve_cemantix,
+    sort_file,
+};
 const DEFAULT_HISTORY_FILENAME: &str = "words_history";
 const DEFAULT_WORDS_FOLDER: &str = "words_folder/";
 
@@ -18,28 +21,34 @@ pub enum Commands {
     Extend(Extend),
     /// Sort your file (A->Z)
     Sort(Sort),
+    /// Graph
+    Graph(Graph),
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Args)]
 pub struct Solve {
     // Source file of the words to brute force
-    pub source_filename: PathBuf,
+    pub source_filename: String,
 
     /// Line index from which solving starts
     #[arg(short, long, default_value_t = 0)]
     pub starting_index: u32,
 
-    /// Number of thread not over 200
+    /// Number of words in batches not over 200
     #[arg(short, long, default_value_t = 100)]
-    pub nb_thread: usize,
+    pub batch_size: usize,
+
+    /// fetch data for graph generation
+    #[arg(short, long, default_value_t = false)]
+    pub graph: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Args)]
 pub struct Ruw {
     /// source file
-    pub source_filename: PathBuf,
+    pub source_filename: String,
     /// file destination
-    pub destination_file: PathBuf,
+    pub destination_file: String,
 
     /// Line index from which remove useless words starts
     #[arg(short, long, default_value_t = 0)]
@@ -47,7 +56,7 @@ pub struct Ruw {
 
     /// Number of thread not over 200
     #[arg(short, long, default_value_t = 100)]
-    pub nb_thread: usize,
+    pub batch_size: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Args)]
@@ -59,12 +68,19 @@ pub struct Nearby {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Args)]
 pub struct Extend {
     /// Source file
-    pub source_file: PathBuf,
+    pub source_file: String,
 }
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Args)]
 pub struct Sort {
     /// source file
-    pub source_file: PathBuf,
+    pub source_file: String,
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Args)]
+pub struct Graph {
+    /// Number of words in batches not over 200
+    #[arg(short, long, default_value_t = 100)]
+    pub batch_size: usize,
 }
 
 #[derive(Parser, Debug)]
@@ -79,83 +95,36 @@ pub struct Cli {
     #[arg(short, long, default_value_t = false)]
     pub verbose: bool,
 
-    /// the directory that contains all the words found (nearby) [DEFAULT: ./words_folder]
-    #[arg(long)]
-    pub words_directory: Option<PathBuf>,
+    /// the directory that contains all the words found (nearby)
+    #[arg(long, default_value_t = String::from(DEFAULT_WORDS_FOLDER))]
+    pub words_directory: String,
 
-    /// declare the name of the file in which the history of words found will be written [DEFAULT: ./words_history]
-    #[arg(long)]
-    pub word_history: Option<PathBuf>,
+    /// declare the name of the file in which the history of words found will be written
+    #[arg(long, default_value_t = String::from(DEFAULT_HISTORY_FILENAME))]
+    pub word_history: String,
 
-    /// specify the current directory where the file will be added/written [DEFAULT: current directory]
+    /// specify the current directory where the file will be added/written
     /// if --words-directory AND/OR --word-history specified, files with the same name will be created the working folder
-    #[arg(long)]
-    pub working_directory: Option<PathBuf>,
+    #[arg(long, default_value_t = String::from("./"))]
+    pub working_directory: String,
 }
 
 impl Cli {
     pub async fn matching(&mut self) {
-        if self.working_directory.is_none() {
-            let _ = self
-                .working_directory
-                .insert(self.generate_path(&vec!["./"]));
-
-            if self.words_directory.is_none() {
-                let _ = self.words_directory.insert(self.generate_path(&vec![
-                    self.working_directory.as_ref().unwrap().to_str().unwrap_or("./"),
-                    DEFAULT_WORDS_FOLDER,
-                ]));
-            } else {
-                let _ = self.words_directory.insert(self.generate_path(&vec![
-                    self.words_directory.as_ref().unwrap().to_str().unwrap(),
-                    "/",
-                ]));
-            }
-
-            if self.word_history.is_none() {
-                let _ = self.word_history.insert(self.generate_path(&vec![
-                    self.working_directory.as_ref().unwrap().to_str().unwrap_or("./"),
-                    DEFAULT_HISTORY_FILENAME,
-                ]));
-            }
-        } else {
-            // working directory specified wo we have to see if we can generate files in it
-            if self.words_directory.is_none() {
-                let _ = self.words_directory.insert(self.generate_path(&vec![
-                    self.working_directory.as_ref().unwrap().to_str().unwrap(),
-                    DEFAULT_WORDS_FOLDER,
-                ]));
-            } else {
-                let _ = self.words_directory.insert(self.generate_path(&vec![
-                    self.working_directory.as_ref().unwrap().to_str().unwrap(),
-                    self.words_directory.as_ref().unwrap().to_str().unwrap(),
-                    "/",
-                ]));
-            }
-
-            if self.word_history.is_none() {
-                let _ = self.word_history.insert(self.generate_path(&vec![
-                    self.working_directory.as_ref().unwrap().to_str().unwrap(),
-                    DEFAULT_HISTORY_FILENAME,
-                ]));
-            } else {
-                let _ = self.word_history.insert(self.generate_path(&vec![
-                    self.working_directory.as_ref().unwrap().to_str().unwrap(),
-                    self.word_history.as_ref().unwrap().to_str().unwrap(),
-                ]));
-            }
-        }
+        let current = PathBuf::from(&self.working_directory);
+        self.word_history = current.join(&self.word_history).display().to_string();
+        self.words_directory = current.join(&self.words_directory).display().to_string();
 
         match &self.command {
             Commands::Solve(name) => {
-                match solve_cemantix(&name.source_filename, &name.nb_thread, &self).await {
+                match solve_cemantix(&name.source_filename, name.batch_size, &self).await {
                     Ok(_) => println!("Command solve executed successfully"),
                     Err(e) => eprintln!("ERROR : {e}"),
                 }
             }
             Commands::Ruw(name) => {
-                let mut nb_thread = name.nb_thread;
-                if name.nb_thread > 200 {
+                let mut nb_thread = name.batch_size;
+                if name.batch_size > 200 {
                     println!("Set number of threads to 200");
                     nb_thread = 200;
                 }
@@ -173,14 +142,13 @@ impl Cli {
                 }
             }
             Commands::Nearby(name) => {
-                match generate_nearby_word(&name.word, self.words_directory.as_ref().unwrap()).await
-                {
+                match generate_nearby_word(&name.word, &self.words_directory).await {
                     Ok(_) => println!("Command nearby executed successfully"),
                     Err(e) => eprintln!("ERROR : {e}"),
                 }
             }
             Commands::Extend(name) => {
-                match extend_file(&name.source_file, self.words_directory.as_ref().unwrap()).await {
+                match extend_file(&name.source_file, &self.words_directory).await {
                     Ok(_) => {
                         println!("Command extend executed successfully");
                     }
@@ -195,14 +163,7 @@ impl Cli {
                     eprintln!("ERROR : {e}");
                 }
             },
+            Commands::Graph(g) => generate_graph(g.batch_size, self).await.unwrap(),
         }
-    }
-
-    fn generate_path(&self, vec_str: &Vec<&str>) -> PathBuf {
-        let mut path_puf = PathBuf::new();
-        for ele in vec_str.iter() {
-            path_puf.push(ele);
-        }
-        return path_puf;
     }
 }
