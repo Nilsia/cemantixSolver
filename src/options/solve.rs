@@ -37,6 +37,7 @@ pub struct SolverStruct {
     score: f32,
     filename: String,
     pub words_data: HashSet<CemantixWord>,
+    pub nb_tested_words: usize,
 }
 
 impl Default for SolverStruct {
@@ -46,6 +47,7 @@ impl Default for SolverStruct {
             score: 0.0,
             filename: String::new(),
             words_data: HashSet::new(),
+            nb_tested_words: 0,
         }
     }
 }
@@ -72,21 +74,21 @@ impl Solve {
                 .max_by(|x, y| x.1.unwrap().total_cmp(y.1.as_ref().unwrap()));
             if let Some(winner) = winner {
                 let value = winner.1.unwrap();
+                let mut best_w = best_word.lock().await;
+                best_w.nb_tested_words += data.len();
                 if value == 1.0 {
-                    let mut best_w = best_word.lock().await;
                     best_w.score = value;
                     best_w.word = winner.0.to_owned();
                     println!("word found : {} ", winner.0);
                     return Ok(true);
                 } else {
-                    let mut best_w = best_word.lock().await;
                     if value > best_w.score {
                         best_w.score = value;
                         best_w.word = winner.0.to_owned();
-                        drop(best_w);
                         println!("New best word : {} with a score of {}", winner.0, value);
                     }
                 }
+                drop(best_w);
             }
             Ok(false)
         };
@@ -98,8 +100,10 @@ impl Solve {
         )
         .await;
 
-        // save new found word and new words related to found word
         let b = best_word.lock().await;
+        println!("{} words have been tested !", b.nb_tested_words);
+
+        // save new found word and new words related to found word
         if let Err(e) =
             adding_word_to_historic(&b.word, &cli.word_history, &cli.words_directory).await
         {

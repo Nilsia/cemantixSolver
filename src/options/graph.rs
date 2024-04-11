@@ -66,6 +66,7 @@ impl Graph {
         for words in words_words_list.iter() {
             words_list.extend(words.iter());
         }
+        let size = words_list.len();
         send_words(
             words_list,
             self.batch_size,
@@ -73,6 +74,10 @@ impl Graph {
             callback_best,
         )
         .await;
+        println!(
+            "{} words have been tested and added to the file {} !",
+            size, word
+        );
         drop(words_words_list);
         let best = best_word.lock().await;
         let data = &best.words_data;

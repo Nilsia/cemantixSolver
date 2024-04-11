@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use chrono::Local;
 use clap::{command, Parser};
 
 use super::{
@@ -56,6 +57,7 @@ impl Cli {
         let current = PathBuf::from(&self.working_directory);
         self.word_history = current.join(&self.word_history).display().to_string();
         self.words_directory = current.join(&self.words_directory).display().to_string();
+        let start = Local::now();
 
         match &self.command {
             Commands::Solve(solve) => {
@@ -99,6 +101,13 @@ impl Cli {
                 Ok(_) => println!("Semantix for nearby words executed"),
                 Err(e) => eprintln!("Error: {e}"),
             },
-        }
+        };
+        let end = Local::now();
+        let diff = end - start;
+        println!(
+            "This operation took {}m {}s ",
+            diff.num_minutes(),
+            diff.num_seconds()
+        );
     }
 }

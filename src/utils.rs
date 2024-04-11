@@ -118,8 +118,8 @@ pub async fn send_request(word: &str) -> Result<f32> {
                     return Err(anyhow::anyhow!("Unauthorized"));
                 }
                 e => {
-                    eprintln!("Ouille");
-                    return Err(anyhow::anyhow!(format!("Unexpected error : {e}")));
+                    eprintln!("Unexpected error : {e}");
+                    return Err(anyhow::anyhow!("Unexpected error : {e}"));
                 }
             };
             match json_parsed.get("error") {
