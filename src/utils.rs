@@ -6,7 +6,7 @@ use std::{fs::OpenOptions, io::Write, sync::Arc};
 use futures::{lock::Mutex, Future};
 
 use crate::{
-    options::solve::{Solve, SolverStruct},
+    options::solve::{DataThread, Solve},
     words_getter::WordGetter,
 };
 
@@ -47,18 +47,23 @@ pub async fn adding_word_to_historic(
 }
 pub async fn send_words<T, F>(
     reader: T,
-    nb_thread: usize,
-    best_word: Arc<Mutex<SolverStruct>>,
-    callback: impl Fn(Arc<Mutex<SolverStruct>>, Vec<(String, Option<f32>)>) -> F,
+    batch_size: usize,
+    best_word: Arc<Mutex<DataThread>>,
+    callback: impl Fn(Arc<Mutex<DataThread>>, Vec<(String, Option<f32>)>) -> F,
+    verbose: bool,
 ) where
     T: IntoIterator,
     T::Item: std::string::ToString,
     F: Future<Output = Result<bool>>,
 {
-    let mut words_list: Vec<String> = vec![String::new(); nb_thread];
-
+    let mut words_list: Vec<String> = vec![String::new(); batch_size];
     let mut iterator = reader.into_iter();
-    let mut taken = iterator.by_ref().take(nb_thread);
+
+    let itertator_len = iterator.by_ref().count();
+    let mut count = 0;
+    let mut last = 0;
+
+    let mut taken = iterator.by_ref().take(batch_size);
 
     loop {
         words_list.clear();
@@ -69,13 +74,22 @@ pub async fn send_words<T, F>(
             break;
         }
         let data = Solve::launch_threads_solve(words_list.clone()).await;
+        count += batch_size;
+
+        let tmp = ((count as f32) / 3.0).floor() as usize;
+        if tmp != last {
+            last = tmp;
+            if verbose {
+                println!("Current state : {count}/{itertator_len}");
+            }
+        }
 
         if let Ok(v) = callback(best_word.clone(), data).await {
             if v {
                 break;
             }
         };
-        taken = iterator.by_ref().take(nb_thread);
+        taken = iterator.by_ref().take(batch_size);
     }
 }
 pub fn generate_client(params: &[(&str, &str)]) -> reqwest::RequestBuilder {

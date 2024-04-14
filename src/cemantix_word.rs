@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::hash::{Hash, Hasher};
 
 use serde::{
@@ -17,6 +18,10 @@ impl CemantixWord {
     pub fn new(word: String, rank: isize, score: f32) -> Self {
         Self { word, rank, score }
     }
+
+    // pub fn fromTuple(data: &(String, Option<f32>)) -> Option<Self> {
+    //     data.1.map(|v| Self::new(data.0.to_owned(), 0, v))
+    // }
 }
 
 impl PartialEq for CemantixWord {
@@ -30,6 +35,34 @@ impl Eq for CemantixWord {}
 impl Hash for CemantixWord {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.word.hash(state);
+    }
+}
+
+impl PartialOrd for CemantixWord {
+    fn lt(&self, other: &Self) -> bool {
+        self.score < other.score
+    }
+
+    fn le(&self, other: &Self) -> bool {
+        self.score <= other.score
+    }
+
+    fn gt(&self, other: &Self) -> bool {
+        self.score > other.score
+    }
+
+    fn ge(&self, other: &Self) -> bool {
+        self.score >= other.score
+    }
+
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CemantixWord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.score.total_cmp(&other.score)
     }
 }
 

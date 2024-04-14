@@ -4,7 +4,8 @@ use chrono::Local;
 use clap::{command, Parser};
 
 use super::{
-    extend::Extend, graph::Graph, nearby::Nearby, remove_all_useless::Ruw, solve::Solve, sort::Sort,
+    extend::Extend, graph::Graph, nearby::Nearby, remove_useless_words::Ruw, solve::Solve,
+    sort::Sort,
 };
 
 const DEFAULT_HISTORY_FILENAME: &str = "words_history";
@@ -97,17 +98,13 @@ impl Cli {
                     eprintln!("ERROR : {e}");
                 }
             },
-            Commands::Graph(graph) => match graph.generate_graph(self).await {
+            Commands::Graph(graph) => match graph.generate_graph(self, None).await {
                 Ok(_) => println!("Semantix for nearby words executed"),
                 Err(e) => eprintln!("Error: {e}"),
             },
         };
         let end = Local::now();
         let diff = end - start;
-        println!(
-            "This operation took {}m {}s ",
-            diff.num_minutes(),
-            diff.num_seconds()
-        );
+        println!("This operation took {}s ", diff.num_seconds());
     }
 }

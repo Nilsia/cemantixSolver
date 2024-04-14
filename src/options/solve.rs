@@ -32,15 +32,40 @@ pub struct Solve {
     #[arg(short, long, default_value_t = false)]
     pub graph: bool,
 }
-pub struct SolverStruct {
-    word: String,
+pub struct DataThread {
+    pub word: String,
     score: f32,
     filename: String,
     pub words_data: HashSet<CemantixWord>,
     pub nb_tested_words: usize,
 }
 
-impl Default for SolverStruct {
+impl DataThread {
+    pub fn new(
+        word: String,
+        score: f32,
+        words_data: HashSet<CemantixWord>,
+        nb_tested_words: usize,
+        words_fcontainer: String,
+    ) -> Self {
+        Self {
+            filename: words_fcontainer + &word,
+            word,
+            score,
+            words_data,
+            nb_tested_words,
+        }
+    }
+
+    pub fn save_into_file(&mut self, cli: &Cli) -> Result<()> {
+        let file = WordGetter::get_file_word(&self.word, false, true, false, &cli.words_directory)?;
+        let mut copy = Vec::from_iter(self.words_data.iter());
+        copy.sort();
+        Ok(serde_json::to_writer(file, &copy)?)
+    }
+}
+
+impl Default for DataThread {
     fn default() -> Self {
         Self {
             word: String::new(),
@@ -65,9 +90,10 @@ impl Solve {
 
         let reader = BufReader::new(file);
 
-        let best_word = Arc::new(Mutex::new(SolverStruct::default()));
-        let callback_solver = |best_word: Arc<Mutex<SolverStruct>>,
+        let best_word = Arc::new(Mutex::new(DataThread::default()));
+        let callback_solver = |best_word: Arc<Mutex<DataThread>>,
                                data: Vec<(String, Option<f32>)>| async move {
+            //TODO use new fucnton fromTuple
             let winner = data
                 .iter()
                 .filter(|v| v.1.is_some())
@@ -97,6 +123,7 @@ impl Solve {
             batch_size,
             best_word.clone(),
             callback_solver,
+            cli.verbose,
         )
         .await;
 
@@ -125,8 +152,11 @@ impl Solve {
             Err(_) => {}
         }
 
+        // TODO avoid resending same data
         if self.graph {
-            Graph::new(self.batch_size).generate_graph(cli).await?
+            Graph::new(self.batch_size)
+                .generate_graph(cli, Some(best_word.clone()))
+                .await?
         }
         Ok(())
     }
