@@ -10,3 +10,4 @@ Cargo.lock
 **/*.rs.bk
 
 src/words_folder/*
+src/words_history
