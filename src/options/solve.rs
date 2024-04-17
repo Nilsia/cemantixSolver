@@ -1,4 +1,5 @@
 use crate::options::extend::Extend;
+use crate::options::options::LogLevel;
 use anyhow::Result;
 use chrono::Local;
 use clap::Args;
@@ -84,12 +85,16 @@ impl Solve {
         let last_word = WordGetter::get_last_found_word(&cli.word_history)?;
         if let Some(last) = last_word {
             if last.1 == Local::now().date_naive() {
-                println!("Word already found ({}) !", last.0);
+                cli.log_and_print(
+                    &format!("Word already found ({}) !", last.0),
+                    LogLevel::Warn,
+                )?;
                 return Ok(());
             }
         }
 
         let reader = BufReader::new(OpenOptions::new().read(true).open(filename)?);
+        let reader2 = BufReader::new(OpenOptions::new().read(true).open(filename)?);
 
         let best_word = Arc::new(Mutex::new(DataThread::default()));
         let callback_solver = |best_word: Arc<Mutex<DataThread>>,
@@ -106,7 +111,7 @@ impl Solve {
                 if value == 1.0 {
                     best_w.score = value;
                     best_w.word = winner.0.to_owned();
-                    println!("word found : {} ", winner.0);
+                    cli.log_and_print(&format!("word found : {} ", winner.0), LogLevel::Info)?;
                     return Ok(true);
                 } else {
                     if value > best_w.score {
@@ -120,7 +125,8 @@ impl Solve {
             Ok(false)
         };
         send_words(
-            reader.lines().flatten(),
+            reader.lines().flatten().count(),
+            reader2.lines().flatten(),
             batch_size,
             best_word.clone(),
             callback_solver,
@@ -129,33 +135,39 @@ impl Solve {
         .await;
 
         let b = best_word.lock().await;
-        println!("{} words have been tested !", b.nb_tested_words);
+        cli.log_and_print(
+            &format!("{} words have been tested !", b.nb_tested_words),
+            LogLevel::Info,
+        )?;
 
         // save new found word and new words related to found word
-        if let Err(e) =
-            adding_word_to_historic(&b.word, &cli.word_history, &cli.words_directory).await
-        {
-            eprintln!("Cannot append {} to historical words : {e}", b.word);
+        if let Err(e) = adding_word_to_historic(&b.word, &cli.word_history, cli).await {
+            cli.log_and_print(
+                &format!("Cannot append {} to historical words : {e}", b.word),
+                LogLevel::Error,
+            )?;
         }
         if let Err(e) = Extend::new(b.filename.to_owned())
             .extend_file(&cli.words_directory)
             .await
         {
-            eprintln!("Cannot extend file {} : {e}", b.filename);
+            cli.log_and_print(
+                &format!("Cannot extend file {} : {e}", b.filename),
+                LogLevel::Error,
+            )?;
         }
-        match Nearby::new(b.word.to_owned())
-            .generate_nearby_word(&cli.words_directory)
+        if Nearby::new(b.word.to_owned())
+            .generate_nearby_word(&cli.words_directory, cli)
             .await
+            .is_ok()
         {
-            Ok(_) => {
-                println!("Nearby words generated")
-            }
-            Err(_) => {}
+            println!("Nearby words generated");
         }
         drop(b);
 
         // TODO avoid resending same data
         if self.graph {
+            cli.log_and_print("Generating graph", LogLevel::Info)?;
             Graph::new(self.batch_size)
                 .generate_graph(cli, Some(best_word.clone()))
                 .await?

@@ -5,6 +5,8 @@ use clap::Args;
 
 use crate::words_getter::WordGetter;
 
+use super::options::{Cli, LogLevel};
+
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Args)]
 pub struct Nearby {
     /// The word of the day only
@@ -28,7 +30,7 @@ impl Nearby {
         Ok(a.send().await?.text().await?)
     }
 
-    pub async fn generate_nearby_word(&self, words_dir: &str) -> Result<()> {
+    pub async fn generate_nearby_word(&self, words_dir: &str, cli: &Cli) -> Result<()> {
         let file_content = self.get_nearby().await?;
         if file_content.is_empty() {
             return Err(anyhow::anyhow!(
@@ -42,7 +44,6 @@ impl Nearby {
                 Err(e) => {
                     match e.kind() {
                         ErrorKind::NotFound => {
-                            eprintln!("An error occured : {e}");
                             return Err(anyhow::anyhow!(e));
                         }
                         ErrorKind::AlreadyExists => {
@@ -54,10 +55,16 @@ impl Nearby {
                 }
             };
 
-        if let Err(_) = file_word.write(&file_content.as_bytes()) {
-            eprintln!("Error cannot write data to file '{}'", self.word);
+        if let Err(e) = file_word.write(&file_content.as_bytes()) {
+            cli.log_and_print(
+                &format!("cannot write data to file '{}' ({e})", self.word),
+                LogLevel::Error,
+            )?;
         } else {
-            println!("Successfully writen data into file '{}'", self.word);
+            cli.log_and_print(
+                &format!("Successfully writen data into file '{}'", self.word),
+                LogLevel::Info,
+            )?;
         }
 
         Ok(())

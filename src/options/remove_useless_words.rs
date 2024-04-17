@@ -33,17 +33,13 @@ impl Ruw {
             println!("Set number of threads to 200");
             self.batch_size = 200;
         }
-        let file = match OpenOptions::new()
+        let file = OpenOptions::new()
             .write(false)
             .read(true)
             .open(&self.source_filename)
-        {
-            Ok(f) => f,
-            Err(e) => {
-                eprintln!("An error occured (file : {}) : {e}", self.source_filename);
-                return Err(anyhow::anyhow!(e));
-            }
-        };
+            .map_err(|e| {
+                anyhow::anyhow!("An error occured (file : {}) : {e}", self.source_filename)
+            })?;
         let sorted_file: Arc<Mutex<fs::File>> = match OpenOptions::new()
             .create_new(true)
             .write(true)
@@ -51,8 +47,10 @@ impl Ruw {
         {
             Ok(f) => Arc::new(Mutex::new(f)),
             Err(e) => {
-                eprintln!("An error occured (file : {}) : {e}", self.destination_file);
-                return Err(anyhow::anyhow!(e));
+                return Err(anyhow::anyhow!(
+                    "An error occured (file : {}) : {e}",
+                    self.destination_file
+                ));
             }
         };
 

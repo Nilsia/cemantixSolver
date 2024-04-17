@@ -7,7 +7,10 @@ use futures::lock::Mutex;
 
 use crate::{cemantix_word::CemantixWord, utils::send_words, words_getter::WordGetter};
 
-use super::{options::Cli, solve::DataThread};
+use super::{
+    options::{Cli, LogLevel},
+    solve::DataThread,
+};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Args)]
 pub struct Graph {
@@ -31,7 +34,7 @@ impl Graph {
             .is_some_and(|v| v.try_lock().is_none())
         {
             return Err(anyhow::anyhow!(
-                "ERROR: please unlock DataThread before sending it !!"
+                "please unlock DataThread before sending it !!"
             ));
         }
         // getting last word
@@ -73,7 +76,7 @@ impl Graph {
         };
         if best_word.lock().await.word != word {
             return Err(anyhow::anyhow!(
-                "Error: {} (given through arguments) != {} (given from previous calculation)",
+                "{} (given through arguments) != {} (given from previous calculation)",
                 word,
                 best_word.lock().await.word
             ));
@@ -104,6 +107,7 @@ impl Graph {
         words_list.retain(|cw| !b.words_data.iter().any(|cw_wd| &&cw_wd.word == cw));
         let reduced_words_number = words_list.len();
         send_words(
+            words_list.len(),
             words_list,
             self.batch_size,
             best_word.clone(),
@@ -111,10 +115,13 @@ impl Graph {
             cli.verbose,
         )
         .await;
-        println!(
-            "{} words have been tested and added to the file {} !",
-            reduced_words_number, word
-        );
+        cli.log_and_print(
+            &format!(
+                "{} words have been tested and added to the file {} !",
+                reduced_words_number, word
+            ),
+            LogLevel::Info,
+        )?;
         drop(words_words_list);
         b.save_into_file(cli)?;
 

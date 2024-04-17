@@ -6,18 +6,26 @@ use std::{fs::OpenOptions, io::Write, sync::Arc};
 use futures::{lock::Mutex, Future};
 
 use crate::{
-    options::solve::{DataThread, Solve},
+    options::{
+        options::{Cli, LogLevel},
+        solve::{DataThread, Solve},
+    },
     words_getter::WordGetter,
 };
 
 pub async fn adding_word_to_historic(
     word: &str,
     word_history_filename: &str,
-    words_fcontainer_name: &str,
+    cli: &Cli,
 ) -> Result<()> {
     // check if the word has already been found (file exists, so file is returned)
-    if let Ok(_) = WordGetter::get_file_word(word, false, true, false, words_fcontainer_name) {
-        println!("Mot déjà trouvé inutile de l'enregistrer à nouveau");
+    if WordGetter::get_last_found_word(word_history_filename)?
+        .is_some_and(|w| w.1 == Local::now().date_naive())
+    {
+        cli.log_and_print(
+            &format!("Word already found, no need to register it"),
+            LogLevel::Warn,
+        )?;
         return Ok(());
     }
 
@@ -46,6 +54,7 @@ pub async fn adding_word_to_historic(
     Ok(())
 }
 pub async fn send_words<T, F>(
+    iterator_len: usize,
     reader: T,
     batch_size: usize,
     best_word: Arc<Mutex<DataThread>>,
@@ -58,8 +67,9 @@ pub async fn send_words<T, F>(
 {
     let mut words_list: Vec<String> = vec![String::new(); batch_size];
     let mut iterator = reader.into_iter();
+    // let n = iterator.collect();
 
-    let itertator_len = iterator.by_ref().count();
+    // let itertator_len = iterator.by_ref().count();
     let mut count = 0;
     let mut last = 0;
 
@@ -78,7 +88,7 @@ pub async fn send_words<T, F>(
         if tmp != last {
             last = tmp;
             if verbose {
-                println!("Current state : {count}/{itertator_len}");
+                println!("Current state : {count}/{iterator_len}");
             }
         }
 
