@@ -26,6 +26,14 @@ impl Graph {
         cli: &Cli,
         calculated_data: Option<Arc<Mutex<DataThread>>>,
     ) -> Result<()> {
+        if calculated_data
+            .as_ref()
+            .is_some_and(|v| v.try_lock().is_none())
+        {
+            return Err(anyhow::anyhow!(
+                "ERROR: please unlock DataThread before sending it !!"
+            ));
+        }
         // getting last word
         let last_word = WordGetter::get_last_found_word(&cli.word_history)?;
         let word: String;
@@ -91,7 +99,7 @@ impl Graph {
         for words in words_words_list.iter() {
             words_list.extend(words.iter());
         }
-        let b = best_word.lock().await;
+        let mut b = best_word.lock().await;
         // removing all words previously calculated
         words_list.retain(|cw| !b.words_data.iter().any(|cw_wd| &&cw_wd.word == cw));
         let reduced_words_number = words_list.len();
@@ -108,7 +116,7 @@ impl Graph {
             reduced_words_number, word
         );
         drop(words_words_list);
-        best_word.lock().await.save_into_file(cli)?;
+        b.save_into_file(cli)?;
 
         Ok(())
     }

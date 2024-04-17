@@ -32,6 +32,8 @@ pub struct Solve {
     #[arg(short, long, default_value_t = false)]
     pub graph: bool,
 }
+
+#[derive(Debug)]
 pub struct DataThread {
     pub word: String,
     score: f32,
@@ -86,9 +88,8 @@ impl Solve {
                 return Ok(());
             }
         }
-        let file = OpenOptions::new().read(true).open(filename)?;
 
-        let reader = BufReader::new(file);
+        let reader = BufReader::new(OpenOptions::new().read(true).open(filename)?);
 
         let best_word = Arc::new(Mutex::new(DataThread::default()));
         let callback_solver = |best_word: Arc<Mutex<DataThread>>,
@@ -151,6 +152,7 @@ impl Solve {
             }
             Err(_) => {}
         }
+        drop(b);
 
         // TODO avoid resending same data
         if self.graph {

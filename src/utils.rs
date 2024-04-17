@@ -68,8 +68,6 @@ pub async fn send_words<T, F>(
     loop {
         words_list.clear();
         words_list = taken.map(|v| v.to_string()).collect::<Vec<String>>();
-        // words_list.sort();
-        // words_list.dedup();
         if words_list.len() == 0 {
             break;
         }

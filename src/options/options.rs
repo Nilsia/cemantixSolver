@@ -90,7 +90,7 @@ impl Cli {
                 }
                 Err(e) => eprintln!("ERROR : {e}"),
             },
-            Commands::Sort(sort) => match sort.sort_file(&sort.source_file).await {
+            Commands::Sort(sort) => match sort.sort_file(self).await {
                 Ok(_) => {
                     println!("Command sort executed successfully ! ");
                 }
